@@ -15,11 +15,8 @@ class DFA(Problem):
         states, alphabet, start_state, final_states, transitions = self.read_automaton(
             args.input
         )
-
         words = args.check.split(',')
-
         results = []
-
         for word in words:
             if self.accepts(
                     word,
@@ -30,7 +27,6 @@ class DFA(Problem):
                 results.append("IGEN")
             else:
                 results.append("NEM")
-
         with open(args.output, "w", encoding="utf-8") as output_file:
             output_file.write("\n".join(results))
 
@@ -60,7 +56,6 @@ class DFA(Problem):
             key = (current_state, symbol)
             if key not in transitions:
                 return False
-
             current_state = transitions[key]
 
         return current_state in final_states
