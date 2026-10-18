@@ -1,44 +1,38 @@
-from project.problem import Problem
 import argparse
 from collections import deque
 from pathlib import Path
 import sys
 
+from project.problem import Problem
+
+
 class AutomatonDeterminizationProblem(Problem):
 
     def initialize_parser(self, parser: argparse.ArgumentParser):
-        parser.add_argument(
-            "--input", required=False, help="A bemeneti fájl elérési útja"
-        )
-        parser.add_argument(
-            "--output", required=False, help="A kimeneti fájl elérési útja"
-        )
-        parser.add_argument(
-            "--det",
-            action="store_true",
-            help="Kapcsoló a determinizálás elvégzéséhez",
-        )
+        try:
+            parser.add_argument(
+                "--det",
+                action="store_true",
+                help="Kapcsoló a determinizálás elvégzéséhez",
+            )
+        except argparse.ArgumentError:
+            pass
 
     def run(self, args):
-        if not args.det:
-            print("A --det kapcsoló hiányzik!")
-            return
-
-        if not args.input or not args.output:
-            raise ValueError(
-                "A --input és --output argumentumok megadása kötelező parancssori futtatáskor!"
-            )
-
-        self.process_file(args.input, args.output)
+        if hasattr(args, "input") and hasattr(args, "output") and args.input and args.output:
+            self.process_file(args.input, args.output)
 
     def process_file(self, input_path: str, output_path: str):
         print(f"Feldolgozás: '{input_path}' -> '{output_path}'")
+
         valid_states, alphabet, start_state, final_states, transitions = (
             self.load_nfa(input_path)
         )
+
         dfa_states, dfa_finals, dfa_transitions = self.determinize(
             valid_states, alphabet, start_state, final_states, transitions
         )
+
         self.write_output(
             output_path,
             dfa_states,
@@ -66,6 +60,7 @@ class AutomatonDeterminizationProblem(Problem):
         alphabet = lines[1].split()
         start_state = lines[2].strip()
         final_states = set(lines[3].split())
+
         if start_state not in valid_states:
             raise ValueError(
                 f"A kezdőállapot ('{start_state}') nem érvényes állapot!"
@@ -76,6 +71,7 @@ class AutomatonDeterminizationProblem(Problem):
                 raise ValueError(
                     f"A végállapot ('{fs}') nem érvényes állapot!"
                 )
+
         transitions = {}
         for line_num, line in enumerate(lines[4:], start=5):
             parts = line.split()
@@ -102,7 +98,9 @@ class AutomatonDeterminizationProblem(Problem):
 
         return valid_states, alphabet, start_state, final_states, transitions
 
-    def determinize(self, valid_states, alphabet, start_state, final_states, transitions ):
+    def determinize(
+            self, valid_states, alphabet, start_state, final_states, transitions
+    ):
         start_tuple = tuple(sorted([start_state]))
 
         queue = deque([start_tuple])
@@ -118,6 +116,8 @@ class AutomatonDeterminizationProblem(Problem):
                 next_set = set()
                 for q in curr_tuple:
                     next_set.update(transitions.get((q, sym), []))
+
+                # Ha nincs átmenet, nem kerül kiírásra él
                 if not next_set:
                     continue
 
@@ -142,6 +142,7 @@ class AutomatonDeterminizationProblem(Problem):
         def state_index(s_name):
             return int(s_name[1:])
 
+        # Rendezés: 1. forrás csomópont index, 2. ábécé szerinti szimbólum, 3. cél csomópont index
         dfa_transitions.sort(
             key=lambda x: (
                 state_index(x[0]),
@@ -161,6 +162,7 @@ class AutomatonDeterminizationProblem(Problem):
             dfa_finals,
             dfa_transitions,
     ):
+
         output_dir = Path(file_path).parent
         if output_dir and not output_dir.exists():
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -172,6 +174,7 @@ class AutomatonDeterminizationProblem(Problem):
             f.write(" ".join(dfa_finals) + "\n")
             for src, sym, dst in dfa_transitions:
                 f.write(f"{src} {sym} {dst}\n")
+
 
 if __name__ == "__main__":
     problem = AutomatonDeterminizationProblem()
@@ -188,5 +191,3 @@ if __name__ == "__main__":
             problem.process_file(input_file, output_file)
         except Exception as e:
             print(f"  -> Hiba ennél: {input_file}: {e}")
-
-#futtatni igy kell python -m project.problems.hazi2
