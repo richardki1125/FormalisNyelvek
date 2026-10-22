@@ -2,7 +2,6 @@ import argparse
 from collections import deque
 from pathlib import Path
 import sys
-
 from project.problem import Problem
 
 
@@ -18,13 +17,15 @@ class AutomatonDeterminizationProblem(Problem):
         except argparse.ArgumentError:
             pass
 
+    def is_chosen_problem(self, args) -> bool:
+        return getattr(args, "det", False) or getattr(args, "problem", "") == "2"
+
     def run(self, args):
-        if hasattr(args, "input") and hasattr(args, "output") and args.input and args.output:
-            self.process_file(args.input, args.output)
+        input_source = getattr(args, "input", None)
+        output_target = getattr(args, "output", None)
+        self.process_file(input_source, output_target)
 
-    def process_file(self, input_path: str, output_path: str):
-        print(f"Feldolgozás: '{input_path}' -> '{output_path}'")
-
+    def process_file(self, input_path, output_path):
         valid_states, alphabet, start_state, final_states, transitions = (
             self.load_nfa(input_path)
         )
@@ -41,33 +42,37 @@ class AutomatonDeterminizationProblem(Problem):
             dfa_finals,
             dfa_transitions,
         )
-        print(f"  -> Sikeresen elkészült: {output_path}")
 
-    def load_nfa(self, file_path):
-        path = Path(file_path)
-        if not path.exists():
-            raise FileNotFoundError(f"A fájl nem található: {file_path}")
-
-        with open(path, "r", encoding="utf-8") as f:
-            lines = [line.strip() for line in f if line.strip()]
+    def load_nfa(self, source):
+        if source is None or source == "-":
+            lines = [line.strip() for line in sys.stdin if line.strip()]
+        elif isinstance(source, (str, Path)):
+            path = Path(source)
+            if not path.exists():
+                raise FileNotFoundError(f"A fájl nem található: {source}")
+            with open(path, "r", encoding="utf-8") as f:
+                lines = [line.strip() for line in f if line.strip()]
+        else:
+            lines = [line.strip() for line in source if line.strip()]
 
         if len(lines) < 4:
             raise ValueError(
                 "A bemeneti fájl nem tartalmazza a szükséges 4 soros fejlécet!"
             )
 
-        valid_states = set(lines[0].split())
+        valid_states = lines[0].split()
+        valid_states_set = set(valid_states)
         alphabet = lines[1].split()
         start_state = lines[2].strip()
         final_states = set(lines[3].split())
 
-        if start_state not in valid_states:
+        if start_state not in valid_states_set:
             raise ValueError(
                 f"A kezdőállapot ('{start_state}') nem érvényes állapot!"
             )
 
         for fs in final_states:
-            if fs not in valid_states:
+            if fs not in valid_states_set:
                 raise ValueError(
                     f"A végállapot ('{fs}') nem érvényes állapot!"
                 )
@@ -82,7 +87,7 @@ class AutomatonDeterminizationProblem(Problem):
 
             src, sym, dst = parts
 
-            if src not in valid_states:
+            if src not in valid_states_set:
                 raise ValueError(
                     f"A(z) {line_num}. sorban a forrásállapot ('{src}') nem érvényes!"
                 )
@@ -90,7 +95,7 @@ class AutomatonDeterminizationProblem(Problem):
                 raise ValueError(
                     f"A(z) {line_num}. sorban a szimbólum ('{sym}') nem szerepel az ábécében!"
                 )
-            if dst not in valid_states:
+            if dst not in valid_states_set:
                 raise ValueError(
                     f"A(z) {line_num}. sorban a célállapot ('{dst}') nem érvényes!"
                 )
@@ -116,8 +121,6 @@ class AutomatonDeterminizationProblem(Problem):
                 next_set = set()
                 for q in curr_tuple:
                     next_set.update(transitions.get((q, sym), []))
-
-                # Ha nincs átmenet, nem kerül kiírásra él
                 if not next_set:
                     continue
 
@@ -142,7 +145,6 @@ class AutomatonDeterminizationProblem(Problem):
         def state_index(s_name):
             return int(s_name[1:])
 
-        # Rendezés: 1. forrás csomópont index, 2. ábécé szerinti szimbólum, 3. cél csomópont index
         dfa_transitions.sort(
             key=lambda x: (
                 state_index(x[0]),
@@ -155,25 +157,32 @@ class AutomatonDeterminizationProblem(Problem):
 
     def write_output(
             self,
-            file_path,
+            target,
             dfa_states,
             alphabet,
             start_state_name,
             dfa_finals,
             dfa_transitions,
     ):
+        lines = [
+            " ".join(dfa_states),
+            " ".join(alphabet),
+            start_state_name,
+            " ".join(dfa_finals),
+        ]
+        for src, sym, dst in dfa_transitions:
+            lines.append(f"{src} {sym} {dst}")
 
-        output_dir = Path(file_path).parent
-        if output_dir and not output_dir.exists():
-            output_dir.mkdir(parents=True, exist_ok=True)
+        output_str = "\n".join(lines) + "\n"
 
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(" ".join(dfa_states) + "\n")
-            f.write(" ".join(alphabet) + "\n")
-            f.write(start_state_name + "\n")
-            f.write(" ".join(dfa_finals) + "\n")
-            for src, sym, dst in dfa_transitions:
-                f.write(f"{src} {sym} {dst}\n")
+        if target is None or target == "-":
+            sys.stdout.write(output_str)
+        else:
+            output_dir = Path(target).parent
+            if output_dir and not output_dir.exists():
+                output_dir.mkdir(parents=True, exist_ok=True)
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(output_str)
 
 
 if __name__ == "__main__":
@@ -185,9 +194,10 @@ if __name__ == "__main__":
         ("hazi2txtk/hazi2bement4.txt", "hazi2txtk/output4.txt"),
     ]
 
-    print("=== Tesztek futtatása a megadott mappákra ===")
+    print("=== Saját tesztek futtatása a helyi mappákra ===")
     for input_file, output_file in test_cases:
         try:
             problem.process_file(input_file, output_file)
+            print(f"  -> Sikeresen lefutott: {input_file}")
         except Exception as e:
             print(f"  -> Hiba ennél: {input_file}: {e}")
