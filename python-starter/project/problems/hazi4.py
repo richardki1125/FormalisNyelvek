@@ -7,6 +7,10 @@ from project.problem import Problem
 
 
 class RegexLogProblem(Problem):
+    LOGCAT_RGX = re.compile(
+        r"(([0-9-]+ [0-9:.]+) +([0-9]+) +([0-9]+) ([IDVEFAW]) (.+?):(?: (.+))?)",
+        re.MULTILINE,
+    )
 
     def initialize_parser(self, parser: argparse.ArgumentParser):
         try:
@@ -48,70 +52,89 @@ class RegexLogProblem(Problem):
         return "".join(source)
 
     def solve_regex_task(self, content: str, subtask: int) -> list[str]:
-        head = r"^[0-9-]+ [0-9:.]+ +[0-9]+ +[0-9]+"
+        # Minden illeszkedő sor: (teljes_sor, timestamp, pid, tid, level, tag, message)
+        entries = self.LOGCAT_RGX.findall(content)
 
         if subtask == 1:
-            patterns = [
-                # 1.1: összes sor, amelyik 10. hónap 15-én jött létre
-                r"^10-15\b",
-                # 1.2: összes sor, amelyik 10. hónap 15-én 10:18:51-kor jött létre
-                r"^10-15 10:18:51\b",
-                # 1.3: összes sor, amelyik 51 másodperckor jött létre (mindegy a perc)
-                r"^[0-9-]+ [0-9]{2}:[0-9]{2}:51\b",
+            counts = [
+                # 1.1: összes sort, amelyik 10. hónap 15-én jött létre
+                sum(1 for _, ts, *_ in entries if re.match(r"10-15\b", ts)),
+                # 1.2: összes sort, amelyik 10. hónap 15-én 10:18:51-kor jött létre
+                sum(1 for _, ts, *_ in entries if re.match(r"10-15 10:18:51\b", ts)),
+                # 1.3: összes sort, amelyik 51 másodperckor jött létre (mindegy a perc)
+                sum(
+                    1
+                    for _, ts, *_ in entries
+                    if re.match(r"[0-9-]+ [0-9]{2}:[0-9]{2}:51\b", ts)
+                ),
                 # 1.4: összes lowmemorykiller taget tartalmazó sor
-                rf"{head} [IDVEFAW] +\blowmemorykiller *:",
-                # 1.5: összes 10:18:51-kor keletkező 221-es PID-jú sor
-                r"^[0-9-]+ 10:18:51\b(?:\.[0-9]+)? +221 +[0-9]+\b",
+                sum(
+                    1
+                    for _, _, _, _, _, tag, _ in entries
+                    if re.search(r"lowmemorykiller", tag)
+                ),
+                # 1.5: összes 10:18:51-kor keletkező 221-es process id-jú sor
+                sum(
+                    1
+                    for _, ts, pid, *_ in entries
+                    if re.search(r" 10:18:51\b", ts) and re.fullmatch(r"221", pid)
+                ),
                 # 1.6: összes hibát tartalmazó sor (E)
-                rf"{head} E ",
+                sum(1 for _, _, _, _, lvl, _, _ in entries if re.fullmatch(r"E", lvl)),
                 # 1.7: összes warning (W), amit a PackageManager küld
-                rf"{head} W +\bPackageManager *:",
+                sum(
+                    1
+                    for _, _, _, _, lvl, tag, _ in entries
+                    if re.fullmatch(r"W", lvl) and re.search(r"PackageManager", tag)
+                ),
                 # 1.8: összes ExoPlayer-es debug (D) infó
-                rf"{head} D +[^:\r\n]*ExoPlayer[^:\r\n]*:",
+                sum(
+                    1
+                    for _, _, _, _, lvl, tag, _ in entries
+                    if re.fullmatch(r"D", lvl) and re.search(r"ExoPlayer", tag)
+                ),
                 # 1.9: összes java állomány pozíciót tartalmazó hiba és warning (EW .java:)
-                rf"{head} [EW] .+?\.java:",
+                sum(
+                    1
+                    for _, _, _, _, lvl, _, msg in entries
+                    if re.fullmatch(r"[EW]", lvl) and re.search(r"\.java:", msg)
+                ),
                 # 1.10: összes sor, ami tartalmazza a Thread szót a message részben (nem a tagben)
-                rf"{head} [IDVEFAW] .+?:.*Thread",
+                sum(
+                    1
+                    for _, _, _, _, _, _, msg in entries
+                    if re.search(r"Thread", msg)
+                ),
             ]
-            return [
-                str(len(re.findall(pat, content, re.MULTILINE))) for pat in patterns
-            ]
+            return [str(c) for c in counts]
 
         if subtask == 2:
             java_files = []
-            error_messages = re.findall(
-                rf"{head} E .+?:(.*)$", content, re.MULTILINE
-            )
-            for msg in error_messages:
-                java_files.extend(re.findall(r"([^\s(:]+\.java):", msg))
+            for _, _, _, _, lvl, _, msg in entries:
+                if re.fullmatch(r"E", lvl):
+                    java_files.extend(re.findall(r"([^\s(:]+\.java):", msg))
             return java_files
 
         if subtask == 3:
-            pids = re.findall(
-                r"^[0-9-]+ [0-9:.]+ +([0-9]+) +[0-9]+ [IDVEFAW] ",
-                content,
-                re.MULTILINE,
-            )
+            pids = [pid for _, _, pid, *_ in entries]
             return list(dict.fromkeys(pids))
 
         if subtask == 4:
-            error_pids = re.findall(
-                r"^[0-9-]+ [0-9:.]+ +([0-9]+) +[0-9]+ E ",
-                content,
-                re.MULTILINE,
-            )
+            error_pids = [
+                pid for _, _, pid, _, lvl, _, _ in entries if re.fullmatch(r"E", lvl)
+            ]
             if not error_pids:
                 return ["PID=0 (0 errors)"]
             top_pid, top_count = Counter(error_pids).most_common(1)[0]
             return [f"PID={top_pid} ({top_count} errors)"]
 
         if subtask == 5:
-            matches = re.findall(
-                r"^[0-9-]+ [0-9:.]+ +([0-9]+) +\1 E ",
-                content,
-                re.MULTILINE,
+            main_thread_errors = sum(
+                1
+                for _, _, pid, tid, lvl, _, _ in entries
+                if re.fullmatch(r"E", lvl) and pid == tid
             )
-            return [str(len(matches))]
+            return [str(main_thread_errors)]
 
         raise ValueError(f"Érvénytelen --rgx érték: {subtask}")
 
@@ -131,7 +154,7 @@ class RegexLogProblem(Problem):
 if __name__ == "__main__":
     problem = RegexLogProblem()
     test_cases = [
-        ("hazi4txtk/hazi4bemenet.txt", "hazi4txtk/output1.txt", 1),
+        ("hazi4txtk/hazi4bemenet.txt", "hazi4txtk/output1.txt", 1)
     ]
 
     print("=== Saját tesztek futtatása a helyi mappákra ===")
