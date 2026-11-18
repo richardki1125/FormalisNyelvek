@@ -8,7 +8,7 @@ from project.problem import Problem
 
 class RegexLogProblem(Problem):
     LOGCAT_RGX = re.compile(
-        r"^(([0-9-]+ [0-9:.]+) +([0-9]+) +([0-9]+) ([IDVEFAW]) (.+?):(?: (.+))?)$",
+        r"(([0-9-]+ [0-9:.]+) +([0-9]+) +([0-9]+) ([IDVEFAW]) (.+?):(?: (.+))?)",
         re.MULTILINE,
     )
 
