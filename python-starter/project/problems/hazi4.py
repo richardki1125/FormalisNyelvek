@@ -71,7 +71,7 @@ class RegexLogProblem(Problem):
                 # 1.9: összes java állomány pozíciót tartalmazó hiba és warning (EW .java:)
                 rf"{head} [EW] .+?\.java:",
                 # 1.10: összes sor, ami tartalmazza a Thread szót a message részben (nem a tagben)
-                rf"{head} [IDVEFAW] .+?:.*\bThread\b",
+                rf"{head} [IDVEFAW] .+?:.*Thread",
             ]
             return [
                 str(len(re.findall(pat, content, re.MULTILINE))) for pat in patterns
@@ -131,7 +131,7 @@ class RegexLogProblem(Problem):
 if __name__ == "__main__":
     problem = RegexLogProblem()
     test_cases = [
-        ("hazi4txtk/hazi4bemenet.txt", "hazi4txtk/output1.txt"),
+        ("hazi4txtk/hazi4bemenet.txt", "hazi4txtk/output1.txt", 1),
     ]
 
     print("=== Saját tesztek futtatása a helyi mappákra ===")
