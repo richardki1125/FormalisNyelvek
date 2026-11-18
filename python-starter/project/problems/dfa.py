@@ -25,10 +25,10 @@ class DFA(Problem):
                     transitions
             ):
                 results.append("IGEN")
-                result.append("NEM")
+                results.append("NEM")
             else:
                 results.append("NEM")
-                result.append("IGEN")
+                results.append("IGEN")
         with open(args.output, "w", encoding="utf-8") as output_file:
             output_file.write("\n".join(results))
 
