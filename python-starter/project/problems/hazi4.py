@@ -8,7 +8,7 @@ from project.problem import Problem
 
 class RegexLogProblem(Problem):
     LOGCAT_RGX = re.compile(
-        r"(([0-9-]+ [0-9:.]+) +([0-9]+) +([0-9]+) ([IDVEFAW]) (.+?):(?: (.+))?)",
+        r"^(([0-9-]+ [0-9:.]+) +([0-9]+) +([0-9]+) ([IDVEFAW]) (.+?):(?: (.+))?)$",
         re.MULTILINE,
     )
 
@@ -52,61 +52,35 @@ class RegexLogProblem(Problem):
         return "".join(source)
 
     def solve_regex_task(self, content: str, subtask: int) -> list[str]:
-        # Minden illeszkedő sor: (teljes_sor, timestamp, pid, tid, level, tag, message)
-        entries = self.LOGCAT_RGX.findall(content)
-
         if subtask == 1:
-            counts = [
+            head = r"^[0-9-]+ [0-9:.]+ +[0-9]+ +[0-9]+"
+            patterns = [
                 # 1.1: összes sort, amelyik 10. hónap 15-én jött létre
-                sum(1 for _, ts, *_ in entries if re.match(r"10-15\b", ts)),
-                # 1.2: összes sort, amelyik 10. hónap 15-én 10:18:51-kor jött létre
-                sum(1 for _, ts, *_ in entries if re.match(r"10-15 10:18:51\b", ts)),
+                r"^10-15\b",
+                # 1.2: összes sort, amelyik 10. hónap 15-én 10 óra 18 perc és 51 másodperckor jött létre
+                r"^10-15 10:18:51\b",
                 # 1.3: összes sort, amelyik 51 másodperckor jött létre (mindegy a perc)
-                sum(
-                    1
-                    for _, ts, *_ in entries
-                    if re.match(r"[0-9-]+ [0-9]{2}:[0-9]{2}:51\b", ts)
-                ),
+                r"^[0-9-]+ [0-9]{2}:[0-9]{2}:51\b",
                 # 1.4: összes lowmemorykiller taget tartalmazó sor
-                sum(
-                    1
-                    for _, _, _, _, _, tag, _ in entries
-                    if re.search(r"lowmemorykiller", tag)
-                ),
+                rf"{head} [IDVEFAW] +lowmemorykiller *:",
                 # 1.5: összes 10:18:51-kor keletkező 221-es process id-jú sor
-                sum(
-                    1
-                    for _, ts, pid, *_ in entries
-                    if re.search(r" 10:18:51\b", ts) and re.fullmatch(r"221", pid)
-                ),
+                r"^[0-9-]+ 10:18:51(?:\.[0-9]+)? +221 +[0-9]+\b",
                 # 1.6: összes hibát tartalmazó sor (E)
-                sum(1 for _, _, _, _, lvl, _, _ in entries if re.fullmatch(r"E", lvl)),
-                # 1.7: összes warning (W), amit a PackageManager küld
-                sum(
-                    1
-                    for _, _, _, _, lvl, tag, _ in entries
-                    if re.fullmatch(r"W", lvl) and re.search(r"PackageManager", tag)
-                ),
+                rf"{head} E ",
+                # 1.7: összes warningot (W), amit a PackageManager küld
+                rf"{head} W +PackageManager *:",
                 # 1.8: összes ExoPlayer-es debug (D) infó
-                sum(
-                    1
-                    for _, _, _, _, lvl, tag, _ in entries
-                    if re.fullmatch(r"D", lvl) and re.search(r"ExoPlayer", tag)
-                ),
+                rf"{head} D .*ExoPlayer",
                 # 1.9: összes java állomány pozíciót tartalmazó hiba és warning (EW .java:)
-                sum(
-                    1
-                    for _, _, _, _, lvl, _, msg in entries
-                    if re.fullmatch(r"[EW]", lvl) and re.search(r"\.java:", msg)
-                ),
+                rf"{head} [EW] .*\.java:",
                 # 1.10: összes sor, ami tartalmazza a Thread szót a message részben (nem a tagben)
-                sum(
-                    1
-                    for _, _, _, _, _, _, msg in entries
-                    if re.search(r"Thread", msg)
-                ),
+                rf"{head} [IDVEFAW] [^:\r\n]+:.*Thread",
             ]
-            return [str(c) for c in counts]
+            return [
+                str(len(re.findall(pat, content, re.MULTILINE))) for pat in patterns
+            ]
+
+        entries = self.LOGCAT_RGX.findall(content)
 
         if subtask == 2:
             java_files = []
